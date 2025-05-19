@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{testType}} - 性能测试报告</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .card { margin-bottom: 20px; }
+    .status-badge { font-size: 1.2em; }
+    .summary-box { 
+      padding: 15px; 
+      border-radius: 5px; 
+      margin-bottom: 20px;
+      background-color: #f8f9fa;
+      border-left: 5px solid #6c757d;
+    }
+    .data-table { width: 100%; }
+    .data-table th { width: 30%; }
+    .chart-container {
+      position: relative;
+      height: 300px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="mb-4">{{title}} <span class="badge bg-{{statusClass}} status-badge">{{status}}</span></h1>
+    <p class="lead">{{description}}</p>
+    
+    <div class="summary-box">
+      <h4>测试总结</h4>
+      <p>{{summary}}</p>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>测试信息</h5>
+          </div>
+          <div class="card-body">
+            <table class="table data-table">
+              <tr>
+                <th>测试类型</th>
+                <td>{{testType}}</td>
+              </tr>
+              <tr>
+                <th>环境</th>
+                <td>{{environment}}</td>
+              </tr>
+              <tr>
+                <th>开始时间</th>
+                <td>{{startTimeFormatted}}</td>
+              </tr>
+              <tr>
+                <th>结束时间</th>
+                <td>{{endTimeFormatted}}</td>
+              </tr>
+              <tr>
+                <th>持续时间</th>
+                <td>{{duration}}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>请求统计</h5>
+          </div>
+          <div class="card-body">
+            <table class="table data-table">
+              <tr>
+                <th>总请求数</th>
+                <td>{{totalRequests}}</td>
+              </tr>
+              <tr>
+                <th>成功请求</th>
+                <td>{{successfulRequests}}</td>
+              </tr>
+              <tr>
+                <th>失败请求</th>
+                <td>{{failedRequests}}</td>
+              </tr>
+              <tr>
+                <th>成功率</th>
+                <td>{{successRate}}%</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>响应时间</h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="responseTimeChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="col-md-6">
+        <div class="card">
+          <div class="card-header">
+            <h5>成功率</h5>
+          </div>
+          <div class="card-body">
+            <div class="chart-container">
+              <canvas id="successRateChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    {{#if hasBottleneckAnalysis}}
+    <div class="card">
+      <div class="card-header">
+        <h5>性能瓶颈分析</h5>
+      </div>
+      <div class="card-body">
+        <pre>{{bottleneckAnalysis}}</pre>
+      </div>
+    </div>
+    {{/if}}
+    
+    {{#if hasErrorReport}}
+    <div class="card">
+      <div class="card-header">
+        <h5>错误分类报告</h5>
+      </div>
+      <div class="card-body">
+        <pre>{{errorClassificationReport}}</pre>
+      </div>
+    </div>
+    {{/if}}
+    
+    <div class="card">
+      <div class="card-header">
+        <h5>详细数据</h5>
+      </div>
+      <div class="card-body">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>参数</th>
+              <th>值</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each detailedData}}
+            <tr>
+              <td>{{@key}}</td>
+              <td>{{this}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // 响应时间图表
+    var responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
+    var responseTimeChart = new Chart(responseTimeCtx, {
+      type: 'line',
+      data: {
+        labels: {{responseTimeLabels}},
+        datasets: [{
+          label: '响应时间 (ms)',
+          data: {{responseTimeData}},
+          borderColor: 'rgb(75, 192, 192)',
+          backgroundColor: 'rgba(75, 192, 192, 0.1)',
+          tension: 0.1,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: '响应时间 (ms)'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: '样本'
+            }
+          }
+        }
+      }
+    });
+    
+    // 成功率图表
+    var successRateCtx = document.getElementById('successRateChart').getContext('2d');
+    var successRateChart = new Chart(successRateCtx, {
+      type: 'line',
+      data: {
+        labels: {{successRateLabels}},
+        datasets: [{
+          label: '成功率 (%)',
+          data: {{successRateData}},
+          borderColor: 'rgb(54, 162, 235)',
+          backgroundColor: 'rgba(54, 162, 235, 0.1)',
+          tension: 0.1,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            max: 100,
+            title: {
+              display: true,
+              text: '成功率 (%)'
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: '样本'
+            }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html> 

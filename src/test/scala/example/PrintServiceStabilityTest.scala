@@ -182,14 +182,14 @@ class PrintServiceStabilityTest extends Simulation {
       val stageName = if (currentTime < 10 * 60 * 1000) "预热阶段" else "稳定阶段"
       
       // 记录稳定阶段出现的错误
-      if (stageName == "稳定阶段" && !isSuccess) {
+      if ((stageName == "稳定阶段" || stageName == "恢复阶段") && !isSuccess) {
         try {
           val now = LocalDateTime.now()
           val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
           val shortFormat = DateTimeFormatter.ofPattern("HHmmss")
           EnhancedReportGenerator.recordResult(
             "PrintServiceStabilityTest", 
-            s"stability_error_${now.format(shortFormat)}", 
+            s"${stageName}_error_${now.format(shortFormat)}", 
             Map(
               "time" -> now.format(formatter),
               "deviceId" -> deviceId,
@@ -199,7 +199,7 @@ class PrintServiceStabilityTest extends Simulation {
             )
           )
         } catch {
-          case e: Exception => println(s"记录稳定性错误时出错: ${e.getMessage}")
+          case e: Exception => println(s"记录${stageName}错误时出错: ${e.getMessage}")
         }
       }
       
@@ -212,10 +212,10 @@ class PrintServiceStabilityTest extends Simulation {
   setUp(
     scn.inject(
       // 预热：5分钟内逐步提升到250 QPS
-      rampUsersPerSec(1).to(250).during(5.minutes),
+      rampUsersPerSec(1).to(1100).during(5.minutes),
       
       // 持续稳定负载：15分钟，维持250 QPS
-      constantUsersPerSec(250).during(15.minutes)
+      constantUsersPerSec(1100).during(5.minutes)
     )
   ).protocols(httpProtocol)
    .assertions(
@@ -246,8 +246,8 @@ class PrintServiceStabilityTest extends Simulation {
     EnhancedReportGenerator.recordResult("PrintServiceStabilityTest", "monitoringEnabled", monitorEnabled)
     EnhancedReportGenerator.recordResult("PrintServiceStabilityTest", "totalDuration", "60分钟")
     EnhancedReportGenerator.recordResult("PrintServiceStabilityTest", "stages", List(
-      Map("name" -> "预热阶段", "users" -> "1-250", "duration" -> "5分钟"),
-      Map("name" -> "稳定阶段", "users" -> "250", "duration" -> "15分钟")
+      Map("name" -> "预热阶段", "users" -> "1-1100", "duration" -> "5分钟"),
+      Map("name" -> "稳定阶段", "users" -> "1100", "duration" -> "15分钟")
     ))
     
     // 记录性能目标
