@@ -7,6 +7,7 @@ import scala.concurrent.duration._
 class PrintServiceLoadTest extends Simulation {
   // 配置参数
   val monitorEnabled: Boolean = System.getProperty("monitor", "true").toBoolean
+  val startTime = System.currentTimeMillis() // 移动到类的顶部
 
   // 初始化日志记录器和报告生成器
   ResponseLogger.initializeStats("PrintServiceLoadTest")
@@ -23,7 +24,7 @@ class PrintServiceLoadTest extends Simulation {
     SystemMonitor.setAlertThresholds(70.0, 80.0)
     // 添加告警回调
     SystemMonitor.addAlertCallback((message, value) => {
-      println(s"性能测试告警: $message")
+      println(s"负载测试告警: $message")
       EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "alerts", message)
     })
   }
@@ -166,6 +167,8 @@ class PrintServiceLoadTest extends Simulation {
         else if (currentTime < 30 * 60 * 1000) 3
         else 4
       
+      val stageName = s"阶段${stageNumber}"
+      
       try {
         // 记录阶段样本，包括连接超时情况
         val sampleData = Map(
@@ -177,7 +180,7 @@ class PrintServiceLoadTest extends Simulation {
           "isTimeout" -> !session.contains("httpStatus")
         )
         
-        EnhancedReportGenerator.recordResult("PrintServiceLoadTest", s"stage_${stageNumber}_sample", sampleData)
+        EnhancedReportGenerator.recordResult("PrintServiceLoadTest", s"${stageName}_sample", sampleData)
         
         // 如果是连接超时，额外记录
         if (!session.contains("httpStatus")) {
@@ -191,8 +194,22 @@ class PrintServiceLoadTest extends Simulation {
             )
           )
         }
+        
+        // 记录任何失败情况
+        if (!isSuccess) {
+          EnhancedReportGenerator.recordResult(
+            "PrintServiceLoadTest",
+            s"${stageName}_error_${System.currentTimeMillis()}", 
+            Map(
+              "deviceId" -> deviceId,
+              "statusCode" -> statusCode,
+              "errorMessage" -> errorMessage,
+              "elapsedMinutes" -> (currentTime / (60 * 1000))
+            )
+          )
+        }
       } catch {
-        case e: Exception => println(s"记录阶段样本时出错: ${e.getMessage}")
+        case e: Exception => println(s"记录${stageName}数据时出错: ${e.getMessage}")
       }
       
       session
@@ -233,22 +250,23 @@ class PrintServiceLoadTest extends Simulation {
    )
 
   // 测试开始前的操作
-  val startTime = System.currentTimeMillis()
-  println("开始负载测试...")
+  before {
+    println("开始负载测试...")
     
-  // 禁用OpenSSL
-  System.setProperty("gatling.ssl.useOpenSsl", "false")
-  System.setProperty("io.netty.handler.ssl.openssl.useOpenSsl", "false")
+    // 禁用OpenSSL
+    System.setProperty("gatling.ssl.useOpenSsl", "false")
+    System.setProperty("io.netty.handler.ssl.openssl.useOpenSsl", "false")
     
-  // 记录测试参数
-  EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "monitoringEnabled", monitorEnabled)
-  EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "totalDuration", "40分钟")
-  EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "stages", List(
-    Map("name" -> "阶段1", "users" -> "50", "duration" -> "10分钟"),
-    Map("name" -> "阶段2", "users" -> "100", "duration" -> "10分钟"),
-    Map("name" -> "阶段3", "users" -> "150", "duration" -> "10分钟"),
-    Map("name" -> "阶段4", "users" -> "200", "duration" -> "10分钟")
-  ))
+    // 记录测试参数
+    EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "monitoringEnabled", monitorEnabled)
+    EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "totalDuration", "40分钟")
+    EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "stages", List(
+      Map("name" -> "阶段1", "users" -> "50", "duration" -> "10分钟"),
+      Map("name" -> "阶段2", "users" -> "100", "duration" -> "10分钟"),
+      Map("name" -> "阶段3", "users" -> "150", "duration" -> "10分钟"),
+      Map("name" -> "阶段4", "users" -> "200", "duration" -> "10分钟")
+    ))
+  }
 
   // 测试结束后的操作
   after {

@@ -9,6 +9,8 @@ class PrintServiceTest extends Simulation {
   val vu: Int = Integer.getInteger("vu", 1)
   val isDebug: Boolean = System.getProperty("debug", "false").toBoolean
   val monitorEnabled: Boolean = System.getProperty("monitor", "true").toBoolean
+  // 测试开始时间
+  val startTime = System.currentTimeMillis()
 
   // 禁用OpenSSL
   System.setProperty("gatling.ssl.useOpenSsl", "false")
@@ -283,7 +285,9 @@ class PrintServiceTest extends Simulation {
    )
 
   // 测试开始前的操作
-  val startTime = System.currentTimeMillis()
+  before {
+    println("开始基准测试...")
+  }
 
   // 在整个测试过程中执行
   val stats = ResponseLogger.getStats("PrintServiceTest")

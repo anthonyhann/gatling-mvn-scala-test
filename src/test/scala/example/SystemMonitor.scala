@@ -1,21 +1,29 @@
 package example
 
-import java.lang.management.{ManagementFactory, MemoryMXBean, OperatingSystemMXBean}
+import java.lang.management.{ManagementFactory, MemoryMXBean, MemoryUsage}
 import java.io.{File, FileWriter, PrintWriter}
 import java.time.{LocalDateTime, Duration}
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.{Executors, ScheduledExecutorService, TimeUnit}
 import scala.collection.mutable.{Map => MutableMap, ArrayBuffer}
 import scala.util.{Try, Success, Failure}
+import com.sun.management.OperatingSystemMXBean
 
 /**
  * 系统资源监控工具
  * 用于收集和报告系统资源使用情况，包括CPU、内存和网络
  */
 object SystemMonitor {
+  // ANSI颜色代码常量
+  private val ANSI_RESET = "\u001B[0m"
+  private val ANSI_RED = "\u001B[31m"
+  private val ANSI_GREEN = "\u001B[32m"
+  private val ANSI_YELLOW = "\u001B[33m"
+  
   private val monitorDir = "target/gatling/system-monitor"
-  private val osBean: OperatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean
-  private val memoryBean: MemoryMXBean = ManagementFactory.getMemoryMXBean
+  private val runtimeBean = ManagementFactory.getRuntimeMXBean
+  private val osBean = ManagementFactory.getOperatingSystemMXBean.asInstanceOf[com.sun.management.OperatingSystemMXBean]
+  private val memoryBean = ManagementFactory.getMemoryMXBean
   private val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
   
   // 存储监控数据
@@ -27,6 +35,9 @@ object SystemMonitor {
   private var cpuAlertThreshold = 80.0 // CPU使用率告警阈值，百分比
   private var memoryAlertThreshold = 80.0 // 内存使用率告警阈值，百分比
   private var alertCallbacks = List[(String, Double) => Unit]()
+  
+  // 监控资源类型
+  private val resourceMonitors = MutableMap[String, Boolean]()
   
   // 监控调度器
   private var scheduler: Option[ScheduledExecutorService] = None
@@ -92,6 +103,80 @@ object SystemMonitor {
     
     println(s"${ANSI_GREEN}系统监控已停止 - 测试: $testName${ANSI_RESET}")
     logEvent(s"停止监控系统资源 - 测试: $testName")
+  }
+  
+  /**
+   * 添加资源监控器
+   * @param resourceType 资源类型：cpu, memory, network, disk等
+   */
+  def addResourceMonitor(resourceType: String): Unit = {
+    resourceMonitors.put(resourceType.toLowerCase, true)
+  }
+  
+  /**
+   * 获取当前CPU使用率
+   * @return CPU使用率百分比
+   */
+  def getCpuUsage: Double = {
+    if (cpuUsageHistory.isEmpty) {
+      getProcessCpuLoad()
+    } else {
+      cpuUsageHistory.last._2
+    }
+  }
+  
+  /**
+   * 获取当前内存使用率
+   * @return 内存使用率百分比
+   */
+  def getMemoryUsage: Double = {
+    if (memoryUsageHistory.isEmpty) {
+      val heapMemoryUsage = memoryBean.getHeapMemoryUsage
+      val usedMemory = heapMemoryUsage.getUsed
+      val maxMemory = heapMemoryUsage.getMax
+      (usedMemory.toDouble / maxMemory) * 100
+    } else {
+      val (_, used, max) = memoryUsageHistory.last
+      (used.toDouble / max) * 100
+    }
+  }
+  
+  /**
+   * 获取监控数据用于报告
+   * @param testNameParam 测试名称
+   * @return 监控数据Map
+   */
+  def getMonitoringDataForReport(testNameParam: String): Map[String, Any] = {
+    val result = MutableMap[String, Any]()
+    
+    // CPU数据
+    val cpuData = cpuUsageHistory.map { case (time, value) =>
+      Map(
+        "time" -> time.format(dateTimeFormatter),
+        "value" -> value
+      )
+    }.toList
+    result("cpu") = cpuData
+    
+    // 内存数据
+    val memoryData = memoryUsageHistory.map { case (time, used, max) =>
+      Map(
+        "time" -> time.format(dateTimeFormatter),
+        "value" -> (used.toDouble / max) * 100,
+        "usedMB" -> used / (1024 * 1024),
+        "maxMB" -> max / (1024 * 1024)
+      )
+    }.toList
+    result("memory") = memoryData
+    
+    // 其他监控数据
+    resourceMonitors.keys.foreach { resourceType =>
+      if (!result.contains(resourceType)) {
+        result(resourceType) = List[Map[String, Any]]()
+      }
+    }
+    
+    result.toMap
   }
   
   /**
@@ -351,52 +436,4 @@ object SystemMonitor {
     val seconds = (duration.getSeconds % 60)
     f"$hours%d小时 $minutes%d分钟 $seconds%d秒"
   }
-  
-  /**
-   * 将系统监控数据导出为HTML报告的数据
-   */
-  def getMonitoringDataForReport(testNameParam: String): Map[String, Any] = {
-    val cpuData = cpuUsageHistory.map { case (time, value) => 
-      Map("time" -> time.format(dateTimeFormatter), "value" -> value.formatted("%.2f"))
-    }.toList
-    
-    val memoryData = memoryUsageHistory.map { case (time, used, total) => 
-      Map(
-        "time" -> time.format(dateTimeFormatter), 
-        "value" -> ((used.toDouble / total) * 100).formatted("%.2f"),
-        "usedMB" -> (used / (1024 * 1024)),
-        "totalMB" -> (total / (1024 * 1024))
-      )
-    }.toList
-    
-    val testMetricsMap = testMetrics.get(testNameParam).map { metrics =>
-      metrics.map { case (key, values) =>
-        val avg = if (values.nonEmpty) values.sum / values.size else 0.0
-        val max = if (values.nonEmpty) values.max else 0.0
-        val min = if (values.nonEmpty) values.min else 0.0
-        
-        key -> Map(
-          "avg" -> avg.formatted("%.2f"),
-          "max" -> max.formatted("%.2f"),
-          "min" -> min.formatted("%.2f"),
-          "values" -> values.map(_.formatted("%.2f")).toList
-        )
-      }.toMap
-    }.getOrElse(Map.empty)
-    
-    Map(
-      "cpuData" -> cpuData,
-      "memoryData" -> memoryData,
-      "metrics" -> testMetricsMap,
-      "testName" -> testNameParam,
-      "startTime" -> (if (startTime != null) startTime.format(dateTimeFormatter) else "未开始"),
-      "endTime" -> LocalDateTime.now().format(dateTimeFormatter)
-    )
-  }
-  
-  // ANSI颜色代码
-  private val ANSI_RESET = "\u001B[0m"
-  private val ANSI_RED = "\u001B[31m"
-  private val ANSI_GREEN = "\u001B[32m"
-  private val ANSI_YELLOW = "\u001B[33m"
 } 

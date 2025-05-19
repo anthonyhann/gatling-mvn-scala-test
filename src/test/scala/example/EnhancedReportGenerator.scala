@@ -1,461 +1,405 @@
 package example
 
 import java.io.{File, FileWriter, PrintWriter}
-import java.time.{LocalDateTime, Duration}
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import scala.collection.mutable.{Map => MutableMap, ArrayBuffer}
-import scala.util.{Try, Success, Failure}
+import java.util.UUID
+import scala.collection.mutable.{Map => MutableMap, ArrayBuffer, Set => MutableSet}
+import scala.collection.concurrent.TrieMap
 
 /**
- * 增强的报告生成器
- * 用于生成详细的性能测试报告，包括性能指标、趋势分析和自定义报告
+ * 增强报告生成器
+ * 负责收集测试数据并生成详细的测试报告
  */
 object EnhancedReportGenerator {
-  private val reportDir = "target/gatling/enhanced-reports"
-  private val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+  // 测试结果数据
+  private val testResults = new TrieMap[String, MutableMap[String, Any]]()
   
-  // 存储测试指标数据
-  private val testMetrics = MutableMap[String, MutableMap[String, ArrayBuffer[Double]]]()
-  private val testResults = MutableMap[String, MutableMap[String, Any]]()
-  private val testHistories = MutableMap[String, ArrayBuffer[Map[String, Any]]]()
+  // 性能指标数据
+  private val metricsData = new TrieMap[String, MutableMap[String, ArrayBuffer[Double]]]()
   
-  // 测试开始和结束时间
-  private val testStartTimes = MutableMap[String, LocalDateTime]()
-  private val testEndTimes = MutableMap[String, LocalDateTime]()
+  // 活跃测试集合
+  private val activeTests = MutableSet[String]()
+  
+  // 报告输出目录
+  private val ReportBaseDir = "target/gatling/enhanced-reports"
+  
+  // 日期格式化
+  private val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm-ss")
   
   /**
-   * 初始化测试报告
-   * @param testName 测试名称
-   * @param testType 测试类型（基准测试、负载测试等）
+   * 初始化报告
+   * @param testType 测试类型
+   * @param title 测试标题
    * @param description 测试描述
    */
-  def initializeReport(testName: String, testType: String, description: String): Unit = {
-    ensureReportDirectory()
+  def initializeReport(testType: String, title: String, description: String): Unit = {
+    // 确保目录存在
+    ensureDirectoryExists(ReportBaseDir)
     
-    // 初始化测试指标存储
-    testMetrics.getOrElseUpdate(testName, MutableMap(
-      "responseTime" -> ArrayBuffer[Double](),
-      "successRate" -> ArrayBuffer[Double](),
-      "requestsPerSecond" -> ArrayBuffer[Double]()
-    ))
+    // 创建测试结果数据结构
+    val testResultMap = testResults.getOrElseUpdate(testType, MutableMap[String, Any]())
     
-    // 记录测试信息
-    testResults.getOrElseUpdate(testName, MutableMap(
-      "testType" -> testType,
-      "description" -> description,
-      "startTime" -> LocalDateTime.now(),
-      "status" -> "进行中"
-    ))
+    // 记录测试基础信息
+    testResultMap += ("testType" -> testType)
+    testResultMap += ("title" -> title)
+    testResultMap += ("description" -> description)
+    testResultMap += ("startTime" -> System.currentTimeMillis())
+    testResultMap += ("status" -> "进行中")
+    testResultMap += ("environment" -> System.getProperty("test.env", "未指定"))
     
-    // 记录测试开始时间
-    testStartTimes(testName) = LocalDateTime.now()
+    // 初始化性能指标数组
+    metricsData.getOrElseUpdate(testType, MutableMap[String, ArrayBuffer[Double]]())
     
-    println(s"${ANSI_GREEN}初始化增强报告 - 测试: $testName, 类型: $testType${ANSI_RESET}")
-  }
-  
-  /**
-   * 记录性能指标
-   * @param testName 测试名称
-   * @param metricName 指标名称
-   * @param value 指标值
-   */
-  def recordMetric(testName: String, metricName: String, value: Double): Unit = {
-    val testMetricsMap = testMetrics.getOrElseUpdate(testName, MutableMap())
-    val metricsArray = testMetricsMap.getOrElseUpdate(metricName, ArrayBuffer[Double]())
-    metricsArray.append(value)
-  }
-  
-  /**
-   * 记录多个性能指标
-   * @param testName 测试名称
-   * @param metrics 指标名称和值的映射
-   */
-  def recordMetrics(testName: String, metrics: Map[String, Double]): Unit = {
-    metrics.foreach { case (name, value) =>
-      recordMetric(testName, name, value)
-    }
+    // 添加到活跃测试
+    activeTests += testType
+    
+    println(s"初始化测试报告: $testType")
   }
   
   /**
    * 记录测试结果
-   * @param testName 测试名称
+   * @param testType 测试类型
    * @param key 结果键
    * @param value 结果值
+   * @return 之前的值，如果没有则返回空字符串
    */
-  def recordResult(testName: String, key: String, value: Any): Unit = {
-    val testResultsMap = testResults.getOrElseUpdate(testName, MutableMap())
-    testResultsMap(key) = value
+  def recordResult(testType: String, key: String, value: Any): Any = {
+    val testResultMap = testResults.getOrElseUpdate(testType, MutableMap[String, Any]())
+    val prev = testResultMap.getOrElse(key, "")
+    testResultMap += (key -> value)
+    prev
   }
   
   /**
-   * 完成测试报告
-   * @param testName 测试名称
-   * @param success 测试是否成功
-   * @param message 完成消息
+   * 记录性能指标
+   * @param testType 测试类型
+   * @param metrics 性能指标Map
    */
-  def finalizeReport(testName: String, success: Boolean, message: String = ""): Unit = {
-    // 记录测试结束时间
-    testEndTimes(testName) = LocalDateTime.now()
+  def recordMetrics(testType: String, metrics: Map[String, Double]): Unit = {
+    val metricsMap = metricsData.getOrElseUpdate(testType, MutableMap[String, ArrayBuffer[Double]]())
     
-    // 更新测试结果
-    val testResultsMap = testResults.getOrElseUpdate(testName, MutableMap())
-    testResultsMap("endTime") = LocalDateTime.now()
-    testResultsMap("duration") = formatDuration(Duration.between(
-      testStartTimes.getOrElse(testName, LocalDateTime.now()),
-      LocalDateTime.now()
-    ))
-    testResultsMap("success") = success
-    testResultsMap("message") = message
-    testResultsMap("status") = if (success) "成功" else "失败"
+    // 添加新指标
+    metrics.foreach { case (key, value) =>
+      val metricsArray = metricsMap.getOrElseUpdate(key, ArrayBuffer[Double]())
+      metricsArray.synchronized {
+        metricsArray += value
+        
+        // 限制数据点数量，保持最新的2000个点
+        if (metricsArray.size > 2000) {
+          metricsMap(key) = metricsArray.takeRight(2000)
+        }
+      }
+    }
     
-    // 保存当次测试结果到历史记录
-    val historyRecord = Map(
-      "testName" -> testName,
-      "startTime" -> testStartTimes.getOrElse(testName, LocalDateTime.now()).format(dateTimeFormatter),
-      "endTime" -> LocalDateTime.now().format(dateTimeFormatter),
-      "success" -> success,
-      "metrics" -> calculateMetricsSummary(testName)
-    )
-    testHistories.getOrElseUpdate(testName, ArrayBuffer[Map[String, Any]]()).append(historyRecord)
-    
-    // 生成HTML报告
-    generateHtmlReport(testName)
-    
-    // 生成趋势分析报告
-    generateTrendReport(testName)
-    
-    println(s"${ANSI_GREEN}完成增强报告 - 测试: $testName, 结果: ${if (success) "成功" else "失败"}${ANSI_RESET}")
+    // 更新到实时监控
+    if (RealTimeMonitorServer.isRunning) {
+      RealTimeMonitorServer.addPerformanceMetrics(testType, metrics)
+    }
   }
   
   /**
-   * 计算指标摘要
+   * 获取最近的性能指标
+   * @param testType 测试类型
+   * @return 最新的性能指标Map
    */
-  private def calculateMetricsSummary(testName: String): Map[String, Map[String, String]] = {
-    val metricsMap = testMetrics.getOrElse(testName, MutableMap())
+  def getRecentMetrics(testType: String): Map[String, Double] = {
+    val metricsMap = metricsData.getOrElse(testType, MutableMap[String, ArrayBuffer[Double]]())
     
-    metricsMap.map { case (metricName, values) =>
-      val avg = if (values.nonEmpty) values.sum / values.size else 0.0
-      val max = if (values.nonEmpty) values.max else 0.0
-      val min = if (values.nonEmpty) values.min else 0.0
-      val p95 = if (values.nonEmpty) calculatePercentile(values.toArray, 95) else 0.0
-      val p99 = if (values.nonEmpty) calculatePercentile(values.toArray, 99) else 0.0
-      
-      metricName -> Map(
-        "avg" -> avg.formatted("%.2f"),
-        "max" -> max.formatted("%.2f"),
-        "min" -> min.formatted("%.2f"),
-        "p95" -> p95.formatted("%.2f"),
-        "p99" -> p99.formatted("%.2f")
-      )
+    metricsMap.map { case (key, values) =>
+      if (values.nonEmpty) (key -> values.last)
+      else (key -> 0.0)
     }.toMap
   }
   
   /**
-   * 计算百分位数
+   * 获取指定指标的最近几个数据点
+   * @param testType 测试类型
+   * @param metricName 指标名称
+   * @param count 数据点数量
+   * @return 最近的数据点列表
    */
-  private def calculatePercentile(values: Array[Double], percentile: Int): Double = {
-    if (values.isEmpty) return 0.0
+  def getRecentMetrics(testType: String, metricName: String, count: Int): List[Double] = {
+    val metricsMap = metricsData.getOrElse(testType, MutableMap[String, ArrayBuffer[Double]]())
     
-    val sortedValues = values.sorted
-    val index = math.ceil(percentile / 100.0 * sortedValues.length).toInt - 1
-    val safeIndex = math.max(0, math.min(sortedValues.length - 1, index))
-    sortedValues(safeIndex)
+    metricsMap.get(metricName) match {
+      case Some(values) => values.takeRight(count).toList
+      case None => List()
+    }
+  }
+  
+  /**
+   * 获取测试摘要信息
+   * @param testType 测试类型
+   * @return 测试摘要Map
+   */
+  def getTestSummary(testType: String): Map[String, Any] = {
+    testResults.getOrElse(testType, MutableMap()).toMap
+  }
+  
+  /**
+   * 获取所有活跃测试类型
+   * @return 活跃测试类型列表
+   */
+  def getActiveTests: List[String] = {
+    activeTests.toList
+  }
+  
+  /**
+   * 获取所有测试结果
+   * @param testType 测试类型
+   * @return 所有测试结果
+   */
+  def getAllResults(testType: String): Map[String, Any] = {
+    testResults.getOrElse(testType, MutableMap()).toMap
+  }
+  
+  /**
+   * 获取所有指标数据
+   * @param testType 测试类型
+   * @return 所有指标数据
+   */
+  def getAllMetrics(testType: String): Map[String, List[Double]] = {
+    val metricsMap = metricsData.getOrElse(testType, MutableMap[String, ArrayBuffer[Double]]())
+    metricsMap.map { case (key, values) => (key -> values.toList) }.toMap
+  }
+  
+  /**
+   * 完成报告生成
+   * @param testType 测试类型
+   * @param success 测试是否成功
+   * @param summary 测试总结
+   */
+  def finalizeReport(testType: String, success: Boolean, summary: String): Unit = {
+    val testResultMap = testResults.getOrElse(testType, MutableMap[String, Any]())
+    
+    // 记录结束时间
+    testResultMap += ("endTime" -> System.currentTimeMillis())
+    testResultMap += ("status" -> (if (success) "成功" else "失败"))
+    testResultMap += ("summary" -> summary)
+    
+    // 计算测试持续时间
+    val startTime = testResultMap.getOrElse("startTime", 0L).asInstanceOf[Long]
+    val endTime = testResultMap("endTime").asInstanceOf[Long]
+    val durationMs = endTime - startTime
+    val durationFormatted = formatDuration(durationMs)
+    testResultMap += ("duration" -> durationFormatted)
+    
+    // 生成HTML报告
+    generateHtmlReport(testType)
+    
+    // 生成JSON报告
+    generateJsonReport(testType)
+    
+    // 从活跃测试中移除
+    activeTests -= testType
+    
+    println(s"完成测试报告: $testType, 状态: ${testResultMap("status")}")
   }
   
   /**
    * 生成HTML报告
+   * @param testType 测试类型
    */
-  private def generateHtmlReport(testName: String): Unit = {
-    val reportFileName = s"$reportDir/${testName}_report.html"
-    val testResult = testResults.getOrElse(testName, MutableMap())
-    val metricsSummary = calculateMetricsSummary(testName)
+  private def generateHtmlReport(testType: String): Unit = {
+    val testResultMap = testResults.getOrElse(testType, MutableMap[String, Any]())
     
-    // 附加系统监控数据（如果可用）
-    val monitoringData = try {
-      Some(SystemMonitor.getMonitoringDataForReport(testName))
-    } catch {
-      case _: Exception => None
-    }
+    // 创建报告目录
+    val now = LocalDateTime.now()
+    val timestamp = now.format(dateTimeFormatter)
+    val reportDir = new File(s"$ReportBaseDir/$testType-$timestamp")
+    reportDir.mkdirs()
     
-    val htmlContent = generateHtmlContent(testName, testResult.toMap, metricsSummary, monitoringData)
+    // 创建HTML文件
+    val htmlFile = new File(reportDir, "report.html")
+    val writer = new PrintWriter(new FileWriter(htmlFile))
     
-    Try {
-      val writer = new PrintWriter(new FileWriter(reportFileName))
-      try {
-        writer.write(htmlContent)
+    try {
+      // 生成HTML内容
+      val html = generateHtmlContent(testType, testResultMap.toMap)
+      writer.println(html)
       } finally {
         writer.close()
       }
       
-      println(s"${ANSI_GREEN}生成HTML报告: $reportFileName${ANSI_RESET}")
-    } match {
-      case Success(_) => // 成功生成报告
-      case Failure(e) => println(s"${ANSI_RED}生成HTML报告失败: ${e.getMessage}${ANSI_RESET}")
-    }
+    println(s"HTML报告已生成: ${htmlFile.getAbsolutePath}")
   }
   
   /**
-   * 生成趋势分析报告
+   * 生成JSON报告
+   * @param testType 测试类型
    */
-  private def generateTrendReport(testName: String): Unit = {
-    val reportFileName = s"$reportDir/${testName}_trend.html"
-    val historyRecords = testHistories.getOrElse(testName, ArrayBuffer())
+  private def generateJsonReport(testType: String): Unit = {
+    val testResultMap = testResults.getOrElse(testType, MutableMap[String, Any]())
     
-    if (historyRecords.size < 2) {
-      println(s"${ANSI_YELLOW}历史记录不足，无法生成趋势分析${ANSI_RESET}")
-      return
-    }
+    // 创建报告目录
+    val now = LocalDateTime.now()
+    val timestamp = now.format(dateTimeFormatter)
+    val reportDir = new File(s"$ReportBaseDir/$testType-$timestamp")
+    reportDir.mkdirs()
     
-    val htmlContent = generateTrendHtmlContent(testName, historyRecords.toList)
+    // 创建JSON文件
+    val jsonFile = new File(reportDir, "report.json")
+    val writer = new PrintWriter(new FileWriter(jsonFile))
     
-    Try {
-      val writer = new PrintWriter(new FileWriter(reportFileName))
-      try {
-        writer.write(htmlContent)
+    try {
+      // 生成JSON内容
+      val json = generateJsonContent(testResultMap.toMap)
+      writer.println(json)
       } finally {
         writer.close()
       }
       
-      println(s"${ANSI_GREEN}生成趋势分析报告: $reportFileName${ANSI_RESET}")
-    } match {
-      case Success(_) => // 成功生成报告
-      case Failure(e) => println(s"${ANSI_RED}生成趋势分析报告失败: ${e.getMessage}${ANSI_RESET}")
-    }
+    println(s"JSON报告已生成: ${jsonFile.getAbsolutePath}")
   }
   
   /**
    * 生成HTML内容
+   * @param testType 测试类型
+   * @param data 测试数据
+   * @return HTML内容
    */
-  private def generateHtmlContent(
-    testName: String, 
-    testResult: Map[String, Any], 
-    metricsSummary: Map[String, Map[String, String]],
-    monitoringData: Option[Map[String, Any]]
-  ): String = {
-    val startTime = testResult.getOrElse("startTime", "未知").toString
-    val endTime = testResult.getOrElse("endTime", "未知").toString
-    val duration = testResult.getOrElse("duration", "未知").toString
-    val success = testResult.getOrElse("success", false).asInstanceOf[Boolean]
-    val testType = testResult.getOrElse("testType", "未知").toString
-    val description = testResult.getOrElse("description", "").toString
+  private def generateHtmlContent(testType: String, data: Map[String, Any]): String = {
+    val title = data.getOrElse("title", "性能测试").toString
+    val description = data.getOrElse("description", "").toString
+    val status = data.getOrElse("status", "未知").toString
+    val statusClass = if (status == "成功") "success" else if (status == "失败") "danger" else "warning"
+    val summary = data.getOrElse("summary", "").toString
+    val environment = data.getOrElse("environment", "未指定").toString
+    val duration = data.getOrElse("duration", "").toString
     
-    val metricsHtml = metricsSummary.map { case (metricName, values) =>
-      s"""
-        <tr>
-          <td>${formatMetricName(metricName)}</td>
-          <td>${values("avg")}</td>
-          <td>${values("min")}</td>
-          <td>${values("max")}</td>
-          <td>${values("p95")}</td>
-          <td>${values("p99")}</td>
-        </tr>
-      """
-    }.mkString("\n")
+    // 获取测试开始和结束时间
+    val startTime = data.getOrElse("startTime", 0L).asInstanceOf[Long]
+    val endTime = data.getOrElse("endTime", 0L).asInstanceOf[Long]
+    val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    val startTimeFormatted = LocalDateTime.ofInstant(
+      java.time.Instant.ofEpochMilli(startTime),
+      java.time.ZoneId.systemDefault()
+    ).format(dateFormat)
+    val endTimeFormatted = LocalDateTime.ofInstant(
+      java.time.Instant.ofEpochMilli(endTime),
+      java.time.ZoneId.systemDefault()
+    ).format(dateFormat)
     
-    // 生成监控数据图表（如果有）
-    val monitoringCharts = monitoringData.map { data =>
-      val cpuData = data("cpuData").asInstanceOf[List[Map[String, Any]]]
-      val memoryData = data("memoryData").asInstanceOf[List[Map[String, Any]]]
-      
-      if (cpuData.isEmpty && memoryData.isEmpty) {
-        "<div>无监控数据可用</div>"
-      } else {
-        val cpuChartData = cpuData.map { point => 
-          s"""{ time: "${point("time")}", value: ${point("value")} }"""
-        }.mkString(", ")
-        
-        val memoryChartData = memoryData.map { point => 
-          s"""{ time: "${point("time")}", value: ${point("value")} }"""
-        }.mkString(", ")
-        
-        s"""
-          <div class="monitoring-section">
-            <h3>系统资源监控</h3>
-            
-            <div class="chart-container">
-              <h4>CPU使用率 (%)</h4>
-              <canvas id="cpuChart"></canvas>
-            </div>
-            
-            <div class="chart-container">
-              <h4>内存使用率 (%)</h4>
-              <canvas id="memoryChart"></canvas>
-            </div>
-            
-            <script>
-              // CPU使用率图表
-              var cpuCtx = document.getElementById('cpuChart').getContext('2d');
-              var cpuData = [${cpuChartData}];
-              
-              var cpuChart = new Chart(cpuCtx, {
-                type: 'line',
-                data: {
-                  labels: cpuData.map(item => item.time),
-                  datasets: [{
-                    label: 'CPU使用率 (%)',
-                    data: cpuData.map(item => item.value),
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.1
-                  }]
-                },
-                options: {
-                  responsive: true,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      max: 100
-                    }
-                  }
-                }
-              });
-              
-              // 内存使用率图表
-              var memoryCtx = document.getElementById('memoryChart').getContext('2d');
-              var memoryData = [${memoryChartData}];
-              
-              var memoryChart = new Chart(memoryCtx, {
-                type: 'line',
-                data: {
-                  labels: memoryData.map(item => item.time),
-                  datasets: [{
-                    label: '内存使用率 (%)',
-                    data: memoryData.map(item => item.value),
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    tension: 0.1
-                  }]
-                },
-                options: {
-                  responsive: true,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      max: 100
-                    }
-                  }
-                }
-              });
-            </script>
-          </div>
-        """
-      }
-    }.getOrElse("<div>未启用系统监控</div>")
+    // 获取请求统计
+    val totalRequests = data.getOrElse("totalRequests", 0).toString
+    val successfulRequests = data.getOrElse("successfulRequests", 0).toString
+    val failedRequests = data.getOrElse("failedRequests", 0).toString
+    val successRate = data.getOrElse("overallSuccessRate", 0.0).asInstanceOf[Double]
     
+    // 生成HTML
     s"""
       <!DOCTYPE html>
       <html lang="zh-CN">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${testName} - 性能测试报告</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <title>$title - 性能测试报告</title>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
         <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-          }
-          .container {
-            max-width: 1200px;
-            margin: 0 auto;
-          }
-          .header {
-            background-color: #4CAF50;
-            color: white;
-            padding: 20px;
+          body { padding: 20px; }
+          .card { margin-bottom: 20px; }
+          .status-badge { font-size: 1.2em; }
+          .summary-box { 
+            padding: 15px; 
             border-radius: 5px;
             margin-bottom: 20px;
+            background-color: #f8f9fa;
+            border-left: 5px solid #6c757d;
           }
-          .success {
-            background-color: #4CAF50;
-          }
-          .failure {
-            background-color: #f44336;
-          }
-          .section {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .monitoring-section {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .chart-container {
-            width: 100%;
-            height: 300px;
-            margin-bottom: 30px;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-          }
-          th {
-            background-color: #4CAF50;
-            color: white;
-          }
-          tr:nth-child(even) {
-            background-color: #f2f2f2;
-          }
+          .data-table { width: 100%; }
+          .data-table th { width: 30%; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header ${if (success) "success" else "failure"}">
-            <h1>${testName} - 性能测试报告</h1>
-            <p><strong>状态:</strong> ${if (success) "成功" else "失败"}</p>
+          <h1 class="mb-4">$title <span class="badge bg-$statusClass status-badge">$status</span></h1>
+          <p class="lead">$description</p>
+          
+          <div class="summary-box">
+            <h4>测试总结</h4>
+            <p>$summary</p>
           </div>
           
-          <div class="section">
-            <h2>测试信息</h2>
-            <table>
-              <tr><td>测试名称</td><td>${testName}</td></tr>
-              <tr><td>测试类型</td><td>${testType}</td></tr>
-              <tr><td>描述</td><td>${description}</td></tr>
-              <tr><td>开始时间</td><td>${startTime}</td></tr>
-              <tr><td>结束时间</td><td>${endTime}</td></tr>
-              <tr><td>持续时间</td><td>${duration}</td></tr>
-              <tr><td>结果</td><td>${if (success) "成功" else "失败"}</td></tr>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="card">
+                <div class="card-header">
+                  <h5>测试信息</h5>
+                </div>
+                <div class="card-body">
+                  <table class="table data-table">
+                    <tr>
+                      <th>测试类型</th>
+                      <td>$testType</td>
+                    </tr>
+                    <tr>
+                      <th>环境</th>
+                      <td>$environment</td>
+                    </tr>
+                    <tr>
+                      <th>开始时间</th>
+                      <td>$startTimeFormatted</td>
+                    </tr>
+                    <tr>
+                      <th>结束时间</th>
+                      <td>$endTimeFormatted</td>
+                    </tr>
+                    <tr>
+                      <th>持续时间</th>
+                      <td>$duration</td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+            </div>
+            
+            <div class="col-md-6">
+              <div class="card">
+                <div class="card-header">
+                  <h5>请求统计</h5>
+                </div>
+                <div class="card-body">
+                  <table class="table data-table">
+                    <tr>
+                      <th>总请求数</th>
+                      <td>$totalRequests</td>
+                    </tr>
+                    <tr>
+                      <th>成功请求</th>
+                      <td>$successfulRequests</td>
+                    </tr>
+                    <tr>
+                      <th>失败请求</th>
+                      <td>$failedRequests</td>
+                    </tr>
+                    <tr>
+                      <th>成功率</th>
+                      <td>${successRate.formatted("%.2f")}%</td>
+                    </tr>
             </table>
+                </div>
+              </div>
+            </div>
           </div>
           
-          <div class="section">
-            <h2>性能指标</h2>
-            <table>
+          <div class="card">
+            <div class="card-header">
+              <h5>详细数据</h5>
+            </div>
+            <div class="card-body">
+              <table class="table table-striped">
               <thead>
                 <tr>
-                  <th>指标</th>
-                  <th>平均值</th>
-                  <th>最小值</th>
-                  <th>最大值</th>
-                  <th>95%</th>
-                  <th>99%</th>
+                    <th>参数</th>
+                    <th>值</th>
                 </tr>
               </thead>
               <tbody>
-                ${metricsHtml}
+                  ${generateDataRows(data)}
               </tbody>
             </table>
           </div>
-          
-          ${monitoringCharts}
-          
-          <div class="section">
-            <h2>测试详情</h2>
-            <p>在Gatling生成的HTML报告中查看完整的测试详情。</p>
-            <p>报告路径: target/gatling/</p>
           </div>
         </div>
       </body>
@@ -464,187 +408,139 @@ object EnhancedReportGenerator {
   }
   
   /**
-   * 生成趋势分析HTML内容
+   * 生成数据行
+   * @param data 测试数据
+   * @return 数据行HTML
    */
-  private def generateTrendHtmlContent(
-    testName: String, 
-    historyRecords: List[Map[String, Any]]
-  ): String = {
-    // 提取趋势数据
-    val timestamps = historyRecords.map(_("startTime").toString)
+  private def generateDataRows(data: Map[String, Any]): String = {
+    val sb = new StringBuilder
     
-    // 提取响应时间趋势
-    val responseTimeTrend = historyRecords.map { record =>
-      val metrics = record("metrics").asInstanceOf[Map[String, Map[String, String]]]
-      metrics.getOrElse("responseTime", Map("avg" -> "0.0"))("avg").toDouble
+    // 排除已在其他部分显示的字段
+    val excludedKeys = Set("testType", "title", "description", "startTime", "endTime", 
+                           "status", "summary", "duration", "totalRequests", 
+                           "successfulRequests", "failedRequests", "overallSuccessRate")
+    
+    // 处理剩余数据
+    for ((key, value) <- data.toSeq.sortBy(_._1)) {
+      if (!excludedKeys.contains(key)) {
+        // 格式化值
+        val formattedValue = formatValue(value)
+        sb.append(s"""
+          <tr>
+            <td>$key</td>
+            <td>$formattedValue</td>
+          </tr>
+        """)
+      }
     }
     
-    // 提取成功率趋势
-    val successRateTrend = historyRecords.map { record =>
-      val metrics = record("metrics").asInstanceOf[Map[String, Map[String, String]]]
-      metrics.getOrElse("successRate", Map("avg" -> "0.0"))("avg").toDouble
-    }
-    
-    // 生成趋势图表数据
-    val responseTimeData = timestamps.zip(responseTimeTrend).map { case (time, value) =>
-      s"""{ time: "$time", value: $value }"""
-    }.mkString(", ")
-    
-    val successRateData = timestamps.zip(successRateTrend).map { case (time, value) =>
-      s"""{ time: "$time", value: $value }"""
-    }.mkString(", ")
-    
-    s"""
-      <!DOCTYPE html>
-      <html lang="zh-CN">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${testName} - 性能趋势分析</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-          }
-          .container {
-            max-width: 1200px;
-            margin: 0 auto;
-          }
-          .header {
-            background-color: #2196F3;
-            color: white;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-          }
-          .section {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          .chart-container {
-            width: 100%;
-            height: 300px;
-            margin-bottom: 30px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>${testName} - 性能趋势分析</h1>
-            <p>分析最近 ${historyRecords.size} 次测试的性能趋势</p>
-          </div>
-          
-          <div class="section">
-            <h2>响应时间趋势</h2>
-            <div class="chart-container">
-              <canvas id="responseTimeChart"></canvas>
-            </div>
-            
-            <h2>成功率趋势</h2>
-            <div class="chart-container">
-              <canvas id="successRateChart"></canvas>
-            </div>
-            
-            <script>
-              // 响应时间趋势图表
-              var responseTimeCtx = document.getElementById('responseTimeChart').getContext('2d');
-              var responseTimeData = [${responseTimeData}];
-              
-              var responseTimeChart = new Chart(responseTimeCtx, {
-                type: 'line',
-                data: {
-                  labels: responseTimeData.map(item => item.time),
-                  datasets: [{
-                    label: '平均响应时间 (ms)',
-                    data: responseTimeData.map(item => item.value),
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.1
-                  }]
-                },
-                options: {
-                  responsive: true
-                }
-              });
-              
-              // 成功率趋势图表
-              var successRateCtx = document.getElementById('successRateChart').getContext('2d');
-              var successRateData = [${successRateData}];
-              
-              var successRateChart = new Chart(successRateCtx, {
-                type: 'line',
-                data: {
-                  labels: successRateData.map(item => item.time),
-                  datasets: [{
-                    label: '成功率 (%)',
-                    data: successRateData.map(item => item.value),
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    tension: 0.1
-                  }]
-                },
-                options: {
-                  responsive: true,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      max: 100
-                    }
-                  }
-                }
-              });
-            </script>
-          </div>
-        </div>
-      </body>
-      </html>
-    """
+    sb.toString
   }
   
   /**
-   * 确保报告目录存在
+   * 格式化值
+   * @param value 原始值
+   * @return 格式化后的字符串
    */
-  private def ensureReportDirectory(): Unit = {
-    val dir = new File(reportDir)
-    if (!dir.exists()) {
-      dir.mkdirs()
+  private def formatValue(value: Any): String = {
+    value match {
+      case map: Map[_, _] => 
+        val formattedMap = map.map { case (k, v) => s"$k: ${formatValue(v)}" }.mkString("<br>")
+        s"<div>$formattedMap</div>"
+      case list: List[_] => 
+        val formattedList = list.map(item => formatValue(item)).mkString("<br>")
+        s"<div>$formattedList</div>"
+      case array: Array[_] => 
+        val formattedArray = array.map(item => formatValue(item)).mkString("<br>")
+        s"<div>$formattedArray</div>"
+      case d: Double => f"$d%.2f"
+      case _ => value.toString
     }
   }
   
   /**
-   * 格式化指标名称
+   * 生成JSON内容
+   * @param data 测试数据
+   * @return JSON字符串
    */
-  private def formatMetricName(name: String): String = {
-    name match {
-      case "responseTime" => "响应时间 (ms)"
-      case "successRate" => "成功率 (%)"
-      case "requestsPerSecond" => "每秒请求数 (RPS)"
-      case "throughput" => "吞吐量 (KB/s)"
-      case "activeUsers" => "活跃用户数"
-      case _ => name
+  private def generateJsonContent(data: Map[String, Any]): String = {
+    val jsonBuilder = new StringBuilder
+    jsonBuilder.append("{\n")
+    
+    val sortedData = data.toSeq.sortBy(_._1)
+    for (i <- sortedData.indices) {
+      val (key, value) = sortedData(i)
+      jsonBuilder.append(s"""  "$key": ${valueToJson(value)}""")
+      if (i < sortedData.size - 1) {
+        jsonBuilder.append(",\n")
+      }
     }
+    
+    jsonBuilder.append("\n}")
+    jsonBuilder.toString
+  }
+  
+  /**
+   * 将值转换为JSON字符串
+   * @param value 原始值
+   * @return JSON字符串表示
+   */
+  private def valueToJson(value: Any): String = {
+    value match {
+      case null => "null"
+      case s: String => s""""$s""""
+      case n: Number => n.toString
+      case b: Boolean => b.toString
+      case m: Map[_, _] => mapToJson(m.asInstanceOf[Map[String, Any]])
+      case l: List[_] => listToJson(l)
+      case a: Array[_] => listToJson(a.toList)
+      case _ => s""""${value.toString}""""
+    }
+  }
+  
+  /**
+   * 将Map转换为JSON字符串
+   * @param map Map对象
+   * @return JSON字符串表示
+   */
+  private def mapToJson(map: Map[String, Any]): String = {
+    val jsonPairs = map.map { case (key, value) =>
+      s""""$key": ${valueToJson(value)}"""
+    }
+    s"{${jsonPairs.mkString(", ")}}"
+  }
+  
+  /**
+   * 将List转换为JSON字符串
+   * @param list List对象
+   * @return JSON字符串表示
+   */
+  private def listToJson(list: List[_]): String = {
+    val jsonValues = list.map(item => valueToJson(item))
+    s"[${jsonValues.mkString(", ")}]"
   }
   
   /**
    * 格式化持续时间
+   * @param durationMs 毫秒数
+   * @return 格式化的持续时间字符串
    */
-  private def formatDuration(duration: Duration): String = {
-    val hours = duration.toHours
-    val minutes = (duration.toMinutes % 60)
-    val seconds = (duration.getSeconds % 60)
+  private def formatDuration(durationMs: Long): String = {
+    val seconds = (durationMs / 1000) % 60
+    val minutes = (durationMs / (1000 * 60)) % 60
+    val hours = (durationMs / (1000 * 60 * 60))
+    
     f"$hours%d小时 $minutes%d分钟 $seconds%d秒"
   }
   
-  // ANSI颜色代码
-  private val ANSI_RESET = "\u001B[0m"
-  private val ANSI_RED = "\u001B[31m"
-  private val ANSI_GREEN = "\u001B[32m"
-  private val ANSI_YELLOW = "\u001B[33m"
+  /**
+   * 确保目录存在
+   * @param path 目录路径
+   */
+  private def ensureDirectoryExists(path: String): Unit = {
+    val dir = new File(path)
+    if (!dir.exists()) {
+      dir.mkdirs()
+    }
+  }
 } 
