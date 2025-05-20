@@ -13,7 +13,7 @@ object TestLauncher {
     println("启动Gatling测试...")
     
     // 获取要运行的测试类
-    val simulationClass = args.headOption.getOrElse("example.OptimizedPrintServiceTest")
+    val simulationClass = args.headOption.getOrElse("example.PrintServiceTest")
     println(s"运行测试类: $simulationClass")
     
     // 构建Gatling属性

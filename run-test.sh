@@ -5,7 +5,7 @@
 # 版本：1.0
 
 # 默认值
-TEST_CLASS="OptimizedPrintServiceTest"
+TEST_CLASS="PrintServiceTest"
 ENV="dev"
 MONITOR="true"
 DEBUG="false"
@@ -18,7 +18,7 @@ show_help() {
   echo "用法: $0 [options] 或 $0 <test-type>"
   echo ""
   echo "test-type 支持以下快捷方式:"
-  echo "  - benchmark: 基准测试 (OptimizedPrintServiceTest)"
+  echo "  - benchmark: 基准测试 (PrintServiceTest)"
   echo "  - load: 负载测试 (PrintServiceLoadTest)"
   echo "  - stress: 压力测试 (PrintServiceStressTest)"
   echo "  - stability: 稳定性测试 (PrintServiceStabilityTest)" 
@@ -43,7 +43,7 @@ show_help() {
 if [ $# -eq 1 ] && [[ ! "$1" =~ ^- ]]; then
   case "$1" in
     benchmark)
-      TEST_CLASS="OptimizedPrintServiceTest"
+      TEST_CLASS="PrintServiceTest"
       ;;
     load)
       TEST_CLASS="PrintServiceLoadTest"
@@ -73,7 +73,7 @@ else
         # 处理测试类型快捷方式
         case "$2" in
           benchmark)
-            TEST_CLASS="OptimizedPrintServiceTest"
+            TEST_CLASS="PrintServiceTest"
             ;;
           load)
             TEST_CLASS="PrintServiceLoadTest"
@@ -124,7 +124,7 @@ else
 fi
 
 # 验证测试类
-if [[ ! "$TEST_CLASS" =~ ^(OptimizedPrintServiceTest|PrintServiceTest|PrintServiceLoadTest|PrintServiceStressTest|PrintServiceStabilityTest)$ ]]; then
+if [[ ! "$TEST_CLASS" =~ ^(PrintServiceTest|PrintServiceTest|PrintServiceLoadTest|PrintServiceStressTest|PrintServiceStabilityTest)$ ]]; then
   echo "警告: '$TEST_CLASS' 不是标准测试类，确保此类存在"
 fi
 
