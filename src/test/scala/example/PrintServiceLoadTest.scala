@@ -257,6 +257,9 @@ class PrintServiceLoadTest extends Simulation {
     System.setProperty("gatling.ssl.useOpenSsl", "false")
     System.setProperty("io.netty.handler.ssl.openssl.useOpenSsl", "false")
     
+    // 启动实时监控服务器
+    RealTimeMonitorServer.start()
+    
     // 记录测试参数
     EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "monitoringEnabled", monitorEnabled)
     EnhancedReportGenerator.recordResult("PrintServiceLoadTest", "totalDuration", "40分钟")
@@ -278,6 +281,11 @@ class PrintServiceLoadTest extends Simulation {
     // 停止系统监控
     if (monitorEnabled) {
       SystemMonitor.stopMonitoring()
+    }
+    
+    // 停止实时监控服务器
+    if (RealTimeMonitorServer.isRunning) {
+      RealTimeMonitorServer.stop()
     }
     
     // 生成增强测试报告

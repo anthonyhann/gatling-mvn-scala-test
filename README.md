@@ -29,7 +29,7 @@ src/
 │   └── scala/
 │       └── example/            # 测试代码
 │           ├── BasePerformanceTest.scala  # 测试基类
-│           ├── OptimizedPrintServiceTest.scala  # 优化版基准测试
+│           ├── PrintServiceTest.scala  # 优化版基准测试
 │           ├── PrintServiceTest.scala  # 基准测试
 │           ├── PrintServiceLoadTest.scala  # 负载测试
 │           ├── PrintServiceStressTest.scala  # 压力测试
@@ -66,7 +66,7 @@ chmod +x install-sbt.sh
 
 ```bash
 # 基本使用方式
-./run-test.sh -t OptimizedPrintServiceTest -e dev
+./run-test.sh -t PrintServiceTest -e dev
 
 # 更多选项
 ./run-test.sh --help
@@ -74,7 +74,7 @@ chmod +x install-sbt.sh
 
 运行脚本支持以下选项：
 
-- `-t, --test CLASS`：指定测试类（默认：OptimizedPrintServiceTest）
+- `-t, --test CLASS`：指定测试类（默认：PrintServiceTest）
 - `-e, --env ENV`：指定环境（默认：dev）
 - `-m, --monitor`：启用监控（默认：true）
 - `-n, --no-monitor`：禁用监控
@@ -84,7 +84,7 @@ chmod +x install-sbt.sh
 
 ## 测试类型
 
-### 基准测试 (PrintServiceTest / OptimizedPrintServiceTest)
+### 基准测试 (PrintServiceTest)
 
 验证单接口在正常负载下的性能表现，适用于日常开发验证。
 

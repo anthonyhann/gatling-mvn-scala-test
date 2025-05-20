@@ -249,6 +249,9 @@ class PrintServiceStressTest extends Simulation {
     // 禁用OpenSSL
     System.setProperty("gatling.ssl.useOpenSsl", "false")
     System.setProperty("io.netty.handler.ssl.openssl.useOpenSsl", "false")
+    
+    // 启动实时监控服务器
+    RealTimeMonitorServer.start()
 
     // 记录测试参数
     EnhancedReportGenerator.recordResult("PrintServiceStressTest", "monitoringEnabled", monitorEnabled)
@@ -300,6 +303,11 @@ class PrintServiceStressTest extends Simulation {
     // 停止系统监控
     if (monitorEnabled) {
       SystemMonitor.stopMonitoring()
+    }
+    
+    // 停止实时监控服务器
+    if (RealTimeMonitorServer.isRunning) {
+      RealTimeMonitorServer.stop()
     }
 
     // 生成增强测试报告
