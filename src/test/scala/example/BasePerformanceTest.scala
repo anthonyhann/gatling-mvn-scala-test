@@ -58,7 +58,7 @@ abstract class BasePerformanceTest extends Simulation {
   val baseUrl: String = 
     testConfig.getOrDefault("api.baseUrl", "https://print-api.liankenet.com")
   val apiKey: String = 
-    testConfig.getOrDefault("api.key", "T1JAkRs9jljHDRMpjJgenqiaO1NTK7IE")
+    testConfig.getOrDefault("api.key", "api-test-key")
   
   // 可接受的错误码和错误信息
   val acceptableErrorCodes: Seq[String] = Seq("200", "5051", "10009", "10011", "11013", "11404", "10015")
@@ -90,13 +90,13 @@ abstract class BasePerformanceTest extends Simulation {
     "jpAutoScale" -> "4",
     "jpAutoAlign" -> "z5",
     "dmOrientation" -> "1",
-    "jobFile" -> "https://saas.maiyatian.com/order/printCloud/?id=10268941929&prefix=f02af493cacadf6273e506db0a1d3ae1",
+    "jobFile" -> "https://jobfile-test-url",
     "dmPaperWidth" -> "",
     "dmPaperLength" -> "",
     "reportDeviceStatus" -> "0",
     "reportPrinterStatus" -> "0",
     "errLimitNum" -> "10",
-    "callbackUrl" -> "https://saas.maiyatian.com/printer/receiveboxtest/",
+    "callbackUrl" -> "https://your-callback-url",
     "isPreview" -> "1",
     "printerModel" -> "24针针打通用驱动"
   )

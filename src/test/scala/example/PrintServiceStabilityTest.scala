@@ -56,7 +56,7 @@ class PrintServiceStabilityTest extends Simulation {
     .userAgentHeader("PostmanRuntime-ApipostRuntime/1.1.0")
     .header("Cache-Control", "no-cache")
     .header("Connection", "keep-alive")
-    .header("ApiKey", "T1JAkRs9jljHDRMpjJgenqiaO1NTK7IE")
+    .header("ApiKey", "api-test-key")
 
   // 加载测试数据
   val feeder = TestDataFeeder.loadRandomDevices(300)
@@ -69,13 +69,13 @@ class PrintServiceStabilityTest extends Simulation {
     "jpAutoScale" -> "4",
     "jpAutoAlign" -> "z5",
     "dmOrientation" -> "1",
-    "jobFile" -> "https://saas.maiyatian.com/order/printCloud/?id=10268941929&prefix=f02af493cacadf6273e506db0a1d3ae1",
+    "jobFile" -> "https://jobfile-test-url",
     "dmPaperWidth" -> "",
     "dmPaperLength" -> "",
     "reportDeviceStatus" -> "0",
     "reportPrinterStatus" -> "0",
     "errLimitNum" -> "10",
-    "callbackUrl" -> "https://saas.maiyatian.com/printer/receiveboxtest/",
+    "callbackUrl" -> "https://your-callback-url",
     "isPreview" -> "1",
     "printerModel" -> "24针针打通用驱动"
   )
