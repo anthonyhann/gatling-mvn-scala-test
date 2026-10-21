@@ -26,16 +26,16 @@ object TestDataFeeder {
     if (!file.exists()) {
       val defaultData = 
         """deviceId,deviceKey
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000
-          |demo-device-0000,demoKey0000000000""".stripMargin
+          |demo-device-9887,zmlpVpxQH6EAMn3x
+          |demo-device-2639,yQjO0v6GWDyqam9H
+          |demo-device-4073,C3L8wn5jXK86OcbD
+          |demo-device-5792,YfAftauGmWdnpzVv
+          |demo-device-8669,R5i1LULzfikljmIV
+          |demo-device-1985,X0hYlerKcnyYyzxf
+          |demo-device-3187,25SyBtOOt2SnYPps
+          |demo-device-6739,UeB7pF42WH5p2zOL
+          |demo-device-9782,rQL9PBx3vPR7lPkN
+          |demo-device-5066,OU1o1vygGatPUkWB""".stripMargin
       
       Try {
         val pw = new java.io.PrintWriter(file)
@@ -74,7 +74,7 @@ object TestDataFeeder {
         println(s"加载测试数据失败: ${e.getMessage}")
         // 返回默认数据作为备份
         Array(
-          Map("deviceId" -> "demo-device-0000", "deviceKey" -> "demoKey0000000000")
+          Map("deviceId" -> "demo-device-5555", "deviceKey" -> "demoKey0000000000")
         ).circular
     }
   }
@@ -97,14 +97,14 @@ object TestDataFeeder {
           println(s"共从 $devicesFilePath 读取到 ${allLines.length} 个设备")
           
           // 过滤排除具有特定前缀的设备ID（可能是过期或有问题的设备）
-          // 这里假设以"demo-device-0000"开头的设备是有效的，您可能需要调整此条件
+          // 这里假设以"demo-device-5537"开头的设备是有效的，您可能需要调整此条件
           val filteredLines = allLines.filter(line => {
             val fields = line.split(",").map(_.trim)
             if (fields.length < 1) false
             else {
               val deviceId = fields(0)
               // 避免使用已知有问题的设备ID
-              !deviceId.contains("demo-device-0000") 
+              !deviceId.contains("demo-device-5537") 
             }
           })
           
@@ -139,7 +139,7 @@ object TestDataFeeder {
             } else {
               println(s"警告: 设备数据格式错误 '$line'，使用默认值")
               Map(
-                "deviceId" -> "demo-device-0000",
+                "deviceId" -> "demo-device-5555",
                 "deviceKey" -> "demoKey0000000000"
               )
             }
